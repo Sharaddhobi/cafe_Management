@@ -4,18 +4,12 @@ import {
   Utensils,
   QrCode,
   Plus,
-  Minus,
   Trash2,
   CheckCircle2,
   AlertCircle,
   Printer,
   RefreshCw,
   Smartphone,
-  Clock,
-  Send,
-  ShoppingBag,
-  User,
-  Phone,
   Lock,
   ChefHat,
   Bell,
@@ -33,25 +27,29 @@ import {
   Shield,
   History,
   Eye,
-  EyeOff
+  EyeOff,
+  Download,
+  MessageCircle,
+  Package,
+  PauseCircle,
+  PlayCircle,
+  XCircle
 } from 'lucide-react';
 import { useMenu } from './hooks/useMenu';
 import { useOrders } from './hooks/useOrders';
 import { useErpData } from './hooks/useErpData';
 import { useTableAlerts } from './hooks/useTableAlerts';
-import ModifierModal from './components/ModifierModal';
-import TicTacToeGame from './components/TicTacToeGame';
+import ParcelOrderModal from './components/ParcelOrderModal';
+import CustomerQrView from './components/CustomerQrView';
+import {
+  exportSalesGstrCsv,
+  exportExpensesCsv,
+  buildWhatsAppBillUrl
+} from './utils/exportHelpers';
 import { supabase } from './lib/supabase';
 
 function formatTimer(ms) {
   const totalSec = Math.max(0, Math.floor(ms / 1000));
-  const m = String(Math.floor(totalSec / 60)).padStart(2, '0');
-  const s = String(totalSec % 60).padStart(2, '0');
-  return `${m}:${s}`;
-}
-
-function formatCountdown(ms) {
-  const totalSec = Math.max(0, Math.ceil(ms / 1000));
   const m = String(Math.floor(totalSec / 60)).padStart(2, '0');
   const s = String(totalSec % 60).padStart(2, '0');
   return `${m}:${s}`;
@@ -168,7 +166,7 @@ function StaffLoginScreen({ onLogin }) {
 }
 
 /* ============================================================================
-   ADMIN: P&L ANALYTICS, EXPENSE TRACKER, STAFF PINS & AUDIT LOG
+   ADMIN: P&L ANALYTICS, EXPENSE TRACKER, STAFF PINS, AUDIT LOG & CSV EXPORTS
 ============================================================================ */
 function AdminErpView({
   orders,
@@ -298,29 +296,47 @@ function AdminErpView({
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap gap-2 bg-white p-2 rounded-2xl border border-slate-200 shadow-sm">
-        {[
-          { id: 'pnl', label: 'P&L & Analytics', icon: BarChart3 },
-          { id: 'expenses', label: `Expenses (${expenses.length})`, icon: Wallet },
-          { id: 'staff', label: `Staff PINs (${staffList.length})`, icon: Shield },
-          { id: 'logs', label: `Audit Log (${logs.length})`, icon: History }
-        ].map((item) => {
-          const Icon = item.icon;
-          return (
-            <button
-              key={item.id}
-              onClick={() => setSubTab(item.id)}
-              className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold transition ${
-                subTab === item.id
+      <div className="flex flex-wrap items-center justify-between gap-2 bg-white p-2 rounded-2xl border border-slate-200 shadow-sm">
+        <div className="flex flex-wrap gap-2">
+          {[
+            { id: 'pnl', label: 'P&L & Analytics', icon: BarChart3 },
+            { id: 'expenses', label: `Expenses (${expenses.length})`, icon: Wallet },
+            { id: 'staff', label: `Staff PINs (${staffList.length})`, icon: Shield },
+            { id: 'logs', label: `Audit Log (${logs.length})`, icon: History }
+          ].map((item) => {
+            const Icon = item.icon;
+            return (
+              <button
+                key={item.id}
+                onClick={() => setSubTab(item.id)}
+                className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold transition ${subTab === item.id
                   ? 'bg-indigo-600 text-white shadow-sm'
                   : 'text-slate-600 hover:bg-slate-100'
-              }`}
-            >
-              <Icon className="w-4 h-4" />
-              {item.label}
-            </button>
-          );
-        })}
+                  }`}
+              >
+                <Icon className="w-4 h-4" />
+                {item.label}
+              </button>
+            );
+          })}
+        </div>
+
+        <div className="flex flex-wrap gap-2">
+          <button
+            onClick={() => exportSalesGstrCsv(orders)}
+            className="inline-flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-3.5 py-2 rounded-xl text-xs shadow-sm"
+          >
+            <Download className="w-3.5 h-3.5" />
+            Export GSTR-1 Sales CSV
+          </button>
+          <button
+            onClick={() => exportExpensesCsv(expenses)}
+            className="inline-flex items-center gap-1.5 bg-slate-800 hover:bg-slate-900 text-white font-bold px-3.5 py-2 rounded-xl text-xs shadow-sm"
+          >
+            <Download className="w-3.5 h-3.5" />
+            Expenses CSV
+          </button>
+        </div>
       </div>
 
       {subTab === 'pnl' && (
@@ -331,9 +347,7 @@ function AdminErpView({
               <p className="text-2xl font-extrabold text-slate-900 mt-1">
                 ₹{metrics.grossRevenue.toLocaleString('en-IN')}
               </p>
-              <p className="text-xs text-slate-500 mt-1">
-                {metrics.paidCount} settled orders
-              </p>
+              <p className="text-xs text-slate-500 mt-1">{metrics.paidCount} settled orders</p>
             </div>
 
             <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
@@ -351,9 +365,7 @@ function AdminErpView({
               <p className="text-2xl font-extrabold text-rose-600 mt-1">
                 ₹{metrics.totalExpenses.toLocaleString('en-IN')}
               </p>
-              <p className="text-xs text-slate-500 mt-1">
-                {expenses.length} recorded bills
-              </p>
+              <p className="text-xs text-slate-500 mt-1">{expenses.length} recorded bills</p>
             </div>
 
             <div
@@ -595,7 +607,7 @@ function AdminErpView({
             </button>
           </form>
 
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-x-auto">
             <div className="p-4 border-b border-slate-100 flex items-center justify-between">
               <h4 className="font-bold text-sm text-slate-900">Active Department Accounts</h4>
               <button
@@ -692,14 +704,18 @@ function AdminErpView({
 }
 
 /* ============================================================================
-   CASHIER POS TERMINAL (WITH LIVE TABLE SERVICE ALERTS)
+   CASHIER POS TERMINAL (DINE-IN FLOOR MAP + PARCEL COUNTER + VOID ORDER)
 ============================================================================ */
 function CashierPosView({
   tables,
+  menu,
   orders,
   alerts = [],
   onResolveAlert,
   onSettleTable,
+  onSettleParcel,
+  onCreateParcel,
+  onVoidOrder,
   onMoveMergeTable
 }) {
   const [selectedTable, setSelectedTable] = useState(null);
@@ -710,14 +726,34 @@ function CashierPosView({
   const [targetMoveTable, setTargetMoveTable] = useState('');
   const [settling, setSettling] = useState(false);
   const [moving, setMoving] = useState(false);
+  const [showParcelModal, setShowParcelModal] = useState(false);
   const [toast, setToast] = useState('');
 
   const [upiId, setUpiId] = useState(() => localStorage.getItem('cafe_upi_id') || 'cafe@upi');
   const [cafeName, setCafeName] = useState(
     () => localStorage.getItem('cafe_brand_name') || 'BREWCRAFT CAFE'
   );
+  const [reviewLink, setReviewLink] = useState(
+    () => localStorage.getItem('cafe_review_link') || ''
+  );
+  const [whatsappPhone, setWhatsappPhone] = useState('');
 
-  // Chime when a new table service alert arrives
+  const dineInTables = useMemo(
+    () => tables.filter((t) => Number(t.table_number) > 0),
+    [tables]
+  );
+
+  const activeParcelOrders = useMemo(
+    () =>
+      orders.filter(
+        (o) =>
+          (o.order_type === 'Parcel' || Number(o.table_number) === 0) &&
+          !o.paid &&
+          o.status !== 'Cancelled'
+      ),
+    [orders]
+  );
+
   const prevAlertIdsRef = useRef(new Set());
   useEffect(() => {
     const currentIds = new Set(alerts.map((a) => a.id));
@@ -737,7 +773,13 @@ function CashierPosView({
   const unpaidByTable = useMemo(() => {
     const map = {};
     orders
-      .filter((o) => !o.paid && o.status !== 'Cancelled')
+      .filter(
+        (o) =>
+          !o.paid &&
+          o.status !== 'Cancelled' &&
+          o.order_type !== 'Parcel' &&
+          Number(o.table_number) > 0
+      )
       .forEach((o) => {
         const t = Number(o.table_number);
         if (!map[t]) map[t] = [];
@@ -747,16 +789,23 @@ function CashierPosView({
   }, [orders]);
 
   useEffect(() => {
-    if (selectedTable === null && tables.length > 0) {
-      const firstOccupied = tables.find((t) => (unpaidByTable[t.table_number] || []).length > 0);
-      setSelectedTable(firstOccupied ? firstOccupied.table_number : tables[0].table_number);
+    if (selectedTable === null && dineInTables.length > 0) {
+      const firstOccupied = dineInTables.find(
+        (t) => (unpaidByTable[t.table_number] || []).length > 0
+      );
+      setSelectedTable(firstOccupied ? firstOccupied.table_number : dineInTables[0].table_number);
     }
-  }, [tables, unpaidByTable, selectedTable]);
+  }, [dineInTables, unpaidByTable, selectedTable]);
 
   const activeOrders = useMemo(
     () => (selectedTable ? unpaidByTable[Number(selectedTable)] || [] : []),
     [unpaidByTable, selectedTable]
   );
+
+  useEffect(() => {
+    const foundPhone = activeOrders.find((o) => o.customer_phone)?.customer_phone || '';
+    setWhatsappPhone(foundPhone);
+  }, [selectedTable, activeOrders]);
 
   const hasGraceOrder = activeOrders.some((o) => o.status === 'Grace_Period');
 
@@ -877,11 +926,98 @@ function CashierPosView({
         </div>
       )}
 
+      <div className="bg-purple-950 text-white rounded-2xl p-4 shadow space-y-3 print:hidden">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-2.5">
+            <div className="bg-purple-600 p-2 rounded-xl">
+              <Package className="w-5 h-5 text-white" />
+            </div>
+            <div>
+              <h3 className="font-bold text-sm">
+                Parcel / Takeaway Counter ({activeParcelOrders.length} Active)
+              </h3>
+              <p className="text-[11px] text-purple-200">
+                Walk-in takeaway orders & Counter QR orders settle independently from dine-in tables.
+              </p>
+            </div>
+          </div>
+
+          <button
+            onClick={() => setShowParcelModal(true)}
+            className="inline-flex items-center gap-1.5 bg-purple-500 hover:bg-purple-400 text-white font-bold px-4 py-2 rounded-xl text-xs shadow"
+          >
+            <Plus className="w-4 h-4" />
+            New Parcel Order
+          </button>
+        </div>
+
+        {activeParcelOrders.length > 0 && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5 pt-1">
+            {activeParcelOrders.map((pcl) => {
+              const pSub = (pcl.items || []).reduce(
+                (s, i) => s + Number(i.price) * Number(i.qty),
+                0
+              );
+              const pTotal = Math.round(pSub * 1.05);
+              return (
+                <div
+                  key={pcl.id}
+                  className="bg-white text-slate-900 rounded-xl p-3 flex flex-col justify-between gap-2"
+                >
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <span className="bg-purple-100 text-purple-800 text-[10px] font-extrabold px-2 py-0.5 rounded">
+                        {pcl.id} • {pcl.status}
+                      </span>
+                      <p className="font-bold text-xs mt-1">{pcl.customer_name}</p>
+                      <p className="text-[11px] text-slate-500">
+                        {(pcl.items || []).map((i) => `${i.qty}x ${i.name}`).join(', ')}
+                      </p>
+                    </div>
+                    <span className="font-extrabold text-sm text-purple-700">₹{pTotal}</span>
+                  </div>
+                  <div className="flex items-center gap-1.5 pt-1 border-t border-slate-100">
+                    <button
+                      onClick={async () => {
+                        await onSettleParcel({
+                          order: pcl,
+                          paymentMethod: 'UPI',
+                          grandTotal: pTotal
+                        });
+                        showToast(`Parcel ${pcl.id} marked Paid (₹${pTotal}).`);
+                      }}
+                      className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-1.5 rounded-lg text-[11px]"
+                    >
+                      Mark Paid (₹{pTotal})
+                    </button>
+                    <button
+                      onClick={async () => {
+                        const reason = window.prompt(
+                          `Void Parcel ${pcl.id}? Enter reason:`,
+                          'Customer cancelled takeaway'
+                        );
+                        if (reason !== null) {
+                          await onVoidOrder(pcl, reason, 'Cashier');
+                          showToast(`Parcel ${pcl.id} voided.`);
+                        }
+                      }}
+                      className="bg-rose-100 hover:bg-rose-200 text-rose-700 font-bold px-2.5 py-1.5 rounded-lg text-[11px]"
+                    >
+                      Void
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 print:hidden">
         <div className="lg:col-span-7 space-y-4">
           <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex flex-wrap items-center justify-between gap-3">
             <div>
-              <h2 className="font-bold text-base text-slate-900">Live Table Floor Map</h2>
+              <h2 className="font-bold text-base text-slate-900">Dine-In Table Floor Map</h2>
               <p className="text-xs text-slate-500">
                 Select any occupied table to view its consolidated bill, move/merge, or settle.
               </p>
@@ -897,7 +1033,7 @@ function CashierPosView({
           </div>
 
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-            {tables.map((t) => {
+            {dineInTables.map((t) => {
               const tOrders = unpaidByTable[t.table_number] || [];
               const isOccupied = tOrders.length > 0;
               const isSelected = Number(selectedTable) === Number(t.table_number);
@@ -926,9 +1062,7 @@ function CashierPosView({
                   <div className="flex items-center justify-between w-full">
                     <span
                       className={`text-xs font-extrabold px-2 py-0.5 rounded-lg ${
-                        isOccupied
-                          ? 'bg-indigo-600 text-white'
-                          : 'bg-slate-200 text-slate-600'
+                        isOccupied ? 'bg-indigo-600 text-white' : 'bg-slate-200 text-slate-600'
                       }`}
                     >
                       T#{t.table_number}
@@ -989,6 +1123,20 @@ function CashierPosView({
                 className="w-full border border-slate-300 rounded-xl px-3 py-1.5 text-xs font-mono font-bold"
               />
             </div>
+            <div className="sm:col-span-2">
+              <label className="block text-[11px] font-bold uppercase text-slate-500 mb-1">
+                Google Maps Review Link (Appended to WhatsApp Bills)
+              </label>
+              <input
+                value={reviewLink}
+                onChange={(e) => {
+                  setReviewLink(e.target.value);
+                  localStorage.setItem('cafe_review_link', e.target.value);
+                }}
+                placeholder="https://g.page/r/your-cafe-review-link"
+                className="w-full border border-slate-300 rounded-xl px-3 py-1.5 text-xs"
+              />
+            </div>
           </div>
         </div>
 
@@ -1030,6 +1178,35 @@ function CashierPosView({
                   </div>
                 )}
 
+                  <div className="space-y-1.5">
+                    {activeOrders.map((ord) => (
+                      <div
+                        key={ord.id}
+                        className="flex items-center justify-between bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs"
+                      >
+                        <div>
+                          <span className="font-mono font-bold text-slate-800">{ord.id}</span>
+                          <span className="ml-2 text-slate-500">({ord.status})</span>
+                        </div>
+                        <button
+                          onClick={async () => {
+                            const reason = window.prompt(
+                              `Cancel ${ord.id} after 1-min window? Enter reason (logged to Audit Trail):`,
+                              'Customer changed mind'
+                            );
+                            if (reason !== null) {
+                              await onVoidOrder(ord, reason, 'Cashier');
+                              showToast(`Voided ${ord.id} (${reason}).`);
+                            }
+                          }}
+                          className="text-rose-600 hover:text-rose-800 font-bold underline"
+                        >
+                          Void Ticket
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+
                 <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 flex items-center gap-2">
                   <ArrowRightLeft className="w-4 h-4 text-slate-500 shrink-0" />
                   <select
@@ -1038,7 +1215,7 @@ function CashierPosView({
                     className="flex-1 bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs font-semibold"
                   >
                     <option value="">Move / Merge into Table...</option>
-                    {tables
+                      {dineInTables
                       .filter((t) => Number(t.table_number) !== Number(selectedTable))
                       .map((t) => (
                         <option key={t.table_number} value={t.table_number}>
@@ -1058,7 +1235,7 @@ function CashierPosView({
                   </button>
                 </div>
 
-                <div className="divide-y divide-slate-100 max-h-52 overflow-y-auto border border-slate-100 rounded-xl px-3">
+                  <div className="divide-y divide-slate-100 max-h-48 overflow-y-auto border border-slate-100 rounded-xl px-3">
                   {consolidatedItems.map((item, idx) => (
                     <div
                       key={idx}
@@ -1198,6 +1375,38 @@ function CashierPosView({
                   </div>
                 )}
 
+                  <div className="bg-emerald-50/70 border border-emerald-200 rounded-xl p-3 flex items-center gap-2">
+                    <input
+                      type="tel"
+                      placeholder="Guest 10-digit WhatsApp No."
+                      value={whatsappPhone}
+                      onChange={(e) => setWhatsappPhone(e.target.value)}
+                      className="flex-1 bg-white border border-emerald-300 rounded-lg px-2.5 py-1.5 text-xs font-semibold outline-none"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const url = buildWhatsAppBillUrl({
+                          phone: whatsappPhone,
+                          cafeName,
+                          tableNumber: selectedTable,
+                          guestNames,
+                          items: consolidatedItems,
+                          billing,
+                          discountPct,
+                          gstPct,
+                          paymentMethod,
+                          reviewLink
+                        });
+                        window.open(url, '_blank', 'noopener,noreferrer');
+                      }}
+                      className="inline-flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-3 py-2 rounded-lg text-xs shrink-0"
+                    >
+                      <MessageCircle className="w-3.5 h-3.5" />
+                      WhatsApp Bill
+                    </button>
+                  </div>
+
                 <button
                   disabled={settling}
                   onClick={handleSettle}
@@ -1213,6 +1422,26 @@ function CashierPosView({
           </div>
         </div>
       </div>
+
+      {showParcelModal && (
+        <ParcelOrderModal
+          menu={menu}
+          onClose={() => setShowParcelModal(false)}
+          onCreateParcel={async ({ customerName, customerPhone, items }) => {
+            await onCreateParcel({
+              tableNumber: 0,
+              qrToken: 'PARCEL-000',
+              standeePin: '00',
+              customerName,
+              customerPhone,
+              items,
+              orderType: 'Parcel',
+              immediateLock: true
+            });
+            showToast(`Parcel order for ${customerName} sent to Kitchen!`);
+          }}
+        />
+      )}
 
       {activeOrders.length > 0 && (
         <div className="hidden print:block max-w-[300px] mx-auto font-mono text-black text-xs p-2">
@@ -1487,7 +1716,7 @@ function MenuManager({ menu, onAdd, onToggleStock, onDelete }) {
 }
 
 /* ============================================================================
-   ADMIN: TABLE QR STANDEE GENERATOR
+   ADMIN: TABLE QR STANDEE GENERATOR (INCLUDES COUNTER PARCEL QR)
 ============================================================================ */
 function QrGenerator({ tables, onRefreshTables }) {
   const [adding, setAdding] = useState(false);
@@ -1532,8 +1761,11 @@ function QrGenerator({ tables, onRefreshTables }) {
   };
 
   const regenerateTableToken = async (tableNum) => {
-    const newToken = `T${tableNum}-${Math.floor(100 + Math.random() * 900)}`;
-    const newPin = String(Math.floor(10 + Math.random() * 90));
+    const newToken =
+      Number(tableNum) === 0
+        ? `PARCEL-${Math.floor(100 + Math.random() * 900)}`
+        : `T${tableNum}-${Math.floor(100 + Math.random() * 900)}`;
+    const newPin = Number(tableNum) === 0 ? '00' : String(Math.floor(10 + Math.random() * 90));
 
     await supabase
       .from('cafe_tables')
@@ -1550,10 +1782,10 @@ function QrGenerator({ tables, onRefreshTables }) {
       <div className="flex flex-wrap items-center justify-between gap-3 bg-white p-4 rounded-2xl border border-slate-200 print:hidden">
         <div>
           <h2 className="text-base font-bold text-slate-900">
-            Unique Table QR Standees ({tables.length} Tables)
+            Table & Parcel Counter QR Standees
           </h2>
           <p className="text-xs text-slate-500">
-            Add new tables anytime—each gets its own locked QR URL and 2-digit verification PIN.
+            Place the purple Parcel QR on your billing counter so takeaway guests can browse & order.
           </p>
         </div>
 
@@ -1564,7 +1796,7 @@ function QrGenerator({ tables, onRefreshTables }) {
             className="inline-flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-semibold px-4 py-2 rounded-xl text-xs shadow-sm"
           >
             <Plus className="w-4 h-4" />
-            {adding ? 'Adding...' : 'Add New Table'}
+            {adding ? 'Adding...' : 'Add Dine-In Table'}
           </button>
           <button
             onClick={() => window.print()}
@@ -1578,6 +1810,7 @@ function QrGenerator({ tables, onRefreshTables }) {
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {tables.map((t) => {
+          const isParcel = Number(t.table_number) === 0;
           const tableUrl = `${baseUrl}/?table=${t.table_number}&token=${t.qr_token}`;
           const qrSrc = `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(
             tableUrl
@@ -1586,20 +1819,28 @@ function QrGenerator({ tables, onRefreshTables }) {
           return (
             <div
               key={t.table_number}
-              className="bg-white rounded-2xl border-2 border-slate-200 p-5 text-center shadow-sm flex flex-col items-center relative"
+              className={`bg-white rounded-2xl border-2 p-5 text-center shadow-sm flex flex-col items-center relative ${isParcel ? 'border-purple-400' : 'border-slate-200'
+                }`}
             >
-              <button
-                onClick={() => deleteTable(t.table_number)}
-                className="print:hidden absolute top-3 right-3 p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg"
-                title="Delete Table"
-              >
-                <Trash2 className="w-3.5 h-3.5" />
-              </button>
+              {!isParcel && (
+                <button
+                  onClick={() => deleteTable(t.table_number)}
+                  className="print:hidden absolute top-3 right-3 p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg"
+                  title="Delete Table"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                </button>
+              )}
 
-              <span className="bg-indigo-600 text-white text-xs font-extrabold px-3 py-1 rounded-full">
-                TABLE #{t.table_number}
+              <span
+                className={`text-white text-xs font-extrabold px-3 py-1 rounded-full ${isParcel ? 'bg-purple-600' : 'bg-indigo-600'
+                  }`}
+              >
+                {isParcel ? 'PARCEL / TAKEAWAY' : `TABLE #${t.table_number}`}
               </span>
-              <p className="text-xs text-slate-500 mt-1.5">Scan to Browse Menu & Order</p>
+              <p className="text-xs text-slate-500 mt-1.5">
+                {isParcel ? 'Counter Menu & Pack-To-Go' : 'Scan to Browse Menu & Order'}
+              </p>
 
               <img
                 src={qrSrc}
@@ -1608,8 +1849,12 @@ function QrGenerator({ tables, onRefreshTables }) {
               />
 
               <div className="bg-slate-100 rounded-xl px-3 py-1.5 w-full mb-3">
-                <p className="text-[11px] uppercase font-bold text-slate-500">Table Verify PIN</p>
-                <p className="text-lg font-mono font-extrabold text-slate-900">{t.standee_pin}</p>
+                <p className="text-[11px] uppercase font-bold text-slate-500">
+                  {isParcel ? 'Order Mode' : 'Table Verify PIN'}
+                </p>
+                <p className="text-lg font-mono font-extrabold text-slate-900">
+                  {isParcel ? 'NO PIN NEEDED' : t.standee_pin}
+                </p>
               </div>
 
               <div className="flex items-center gap-3 print:hidden">
@@ -1638,7 +1883,7 @@ function QrGenerator({ tables, onRefreshTables }) {
 }
 
 /* ============================================================================
-   KITCHEN DISPLAY SYSTEM (KDS) — WITH MODIFIERS & NOTES
+   KITCHEN DISPLAY SYSTEM (KDS) — PARCEL BADGES, HOLD/RESUME & VOID ORDER
 ============================================================================ */
 function KitchenDisplayView({
   orders,
@@ -1647,6 +1892,8 @@ function KitchenDisplayView({
   onStartPreparing,
   onMarkReady,
   onMarkServed,
+  onToggleHold,
+  onVoidOrder,
   onToggleStock
 }) {
   const [stationFilter, setStationFilter] = useState('All');
@@ -1661,7 +1908,10 @@ function KitchenDisplayView({
   };
 
   const newOrders = useMemo(
-    () => filterByStation(orders.filter((o) => o.status === 'New')).reverse(),
+    () =>
+      filterByStation(
+        orders.filter((o) => o.status === 'New' || o.status === 'On_Hold')
+      ).reverse(),
     [orders, stationFilter]
   );
   const preparingOrders = useMemo(
@@ -1675,7 +1925,8 @@ function KitchenDisplayView({
 
   const prevNewIdsRef = useRef(new Set());
   useEffect(() => {
-    const currentIds = new Set(newOrders.map((o) => o.id));
+    const activeNew = newOrders.filter((o) => o.status === 'New');
+    const currentIds = new Set(activeNew.map((o) => o.id));
     let hasBrandNew = false;
     currentIds.forEach((id) => {
       if (!prevNewIdsRef.current.has(id)) hasBrandNew = true;
@@ -1703,7 +1954,7 @@ function KitchenDisplayView({
           <div>
             <h2 className="font-bold text-base">Kitchen Display System (KDS)</h2>
             <p className="text-xs text-slate-400">
-              Only locked orders appear here. 60-second grace orders stay hidden until finalized.
+              Use Hold if a guest asks to delay prep, or Void if cancelled after 1 minute.
             </p>
           </div>
         </div>
@@ -1780,7 +2031,7 @@ function KitchenDisplayView({
           <div className="flex items-center justify-between">
             <h3 className="font-extrabold text-sm text-slate-800 flex items-center gap-2">
               <span className="w-2.5 h-2.5 rounded-full bg-blue-600"></span>
-              NEW TICKETS
+              NEW / ON HOLD
             </h3>
             <span className="bg-blue-600 text-white text-xs font-extrabold px-2.5 py-0.5 rounded-full">
               {newOrders.length}
@@ -1792,23 +2043,39 @@ function KitchenDisplayView({
           ) : (
             newOrders.map((ord) => {
               const waitMs = now - Number(ord.grace_ends_at || ord.created_at);
+              const isParcel = ord.order_type === 'Parcel' || Number(ord.table_number) === 0;
+              const isHeld = ord.status === 'On_Hold';
+
               return (
                 <div
                   key={ord.id}
-                  className="bg-white rounded-2xl border-2 border-blue-400 p-4 shadow-sm space-y-3"
+                  className={`rounded-2xl border-2 p-4 shadow-sm space-y-3 ${isHeld
+                    ? 'bg-slate-50 border-slate-400'
+                    : isParcel
+                      ? 'bg-purple-50/40 border-purple-500'
+                      : 'bg-white border-blue-400'
+                    }`}
                 >
                   <div className="flex items-start justify-between">
                     <div>
-                      <span className="bg-slate-900 text-white text-xs font-extrabold px-2.5 py-1 rounded-lg">
-                        TABLE #{ord.table_number}
+                      <span
+                        className={`text-white text-xs font-extrabold px-2.5 py-1 rounded-lg ${isParcel ? 'bg-purple-600' : 'bg-slate-900'
+                          }`}
+                      >
+                        {isParcel ? 'PARCEL • PACK TO GO' : `TABLE #${ord.table_number}`}
                       </span>
                       <p className="font-bold text-sm text-slate-900 mt-1.5">
                         {ord.customer_name}
                       </p>
                       <p className="text-[11px] text-slate-400 font-mono">{ord.id}</p>
                     </div>
-                    <span className="bg-blue-50 text-blue-700 border border-blue-200 font-mono font-bold text-xs px-2.5 py-1 rounded-lg">
-                      Wait {formatTimer(waitMs)}
+                    <span
+                      className={`font-mono font-bold text-xs px-2.5 py-1 rounded-lg border ${isHeld
+                        ? 'bg-slate-200 text-slate-700 border-slate-300'
+                        : 'bg-blue-50 text-blue-700 border-blue-200'
+                        }`}
+                    >
+                      {isHeld ? 'PAUSED' : `Wait ${formatTimer(waitMs)}`}
                     </span>
                   </div>
 
@@ -1836,13 +2103,48 @@ function KitchenDisplayView({
                     ))}
                   </div>
 
-                  <button
-                    onClick={() => onStartPreparing(ord)}
-                    className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2.5 rounded-xl text-xs flex items-center justify-center gap-1.5 shadow-sm"
-                  >
-                    <Flame className="w-4 h-4" />
-                    Accept & Start Prep Timer
-                  </button>
+                  <div className="space-y-2">
+                    {!isHeld && (
+                      <button
+                        onClick={() => onStartPreparing(ord)}
+                        className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2.5 rounded-xl text-xs flex items-center justify-center gap-1.5 shadow-sm"
+                      >
+                        <Flame className="w-4 h-4" />
+                        Accept & Start Prep Timer
+                      </button>
+                    )}
+
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        onClick={() => onToggleHold(ord)}
+                        className="bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold py-2 rounded-xl text-xs flex items-center justify-center gap-1"
+                      >
+                        {isHeld ? (
+                          <>
+                            <PlayCircle className="w-3.5 h-3.5 text-emerald-700" /> Resume
+                          </>
+                        ) : (
+                          <>
+                            <PauseCircle className="w-3.5 h-3.5" /> Hold Prep
+                          </>
+                        )}
+                      </button>
+                      <button
+                        onClick={async () => {
+                          const reason = window.prompt(
+                            `Void ${ord.id}? Enter reason:`,
+                            'Customer requested cancellation'
+                          );
+                          if (reason !== null) {
+                            await onVoidOrder(ord, reason, 'Kitchen');
+                          }
+                        }}
+                        className="bg-rose-100 hover:bg-rose-200 text-rose-700 font-bold py-2 rounded-xl text-xs flex items-center justify-center gap-1"
+                      >
+                        <XCircle className="w-3.5 h-3.5" /> Void
+                      </button>
+                    </div>
+                  </div>
                 </div>
               );
             })
@@ -1865,15 +2167,22 @@ function KitchenDisplayView({
           ) : (
             preparingOrders.map((ord) => {
               const elapsedMs = now - Number(ord.accepted_at || ord.created_at);
+              const isParcel = ord.order_type === 'Parcel' || Number(ord.table_number) === 0;
               return (
                 <div
                   key={ord.id}
-                  className="bg-white rounded-2xl border-2 border-amber-400 p-4 shadow-sm space-y-3"
+                  className={`rounded-2xl border-2 p-4 shadow-sm space-y-3 ${isParcel
+                    ? 'bg-purple-50/40 border-purple-500'
+                    : 'bg-white border-amber-400'
+                    }`}
                 >
                   <div className="flex items-start justify-between">
                     <div>
-                      <span className="bg-slate-900 text-white text-xs font-extrabold px-2.5 py-1 rounded-lg">
-                        TABLE #{ord.table_number}
+                      <span
+                        className={`text-white text-xs font-extrabold px-2.5 py-1 rounded-lg ${isParcel ? 'bg-purple-600' : 'bg-slate-900'
+                          }`}
+                      >
+                        {isParcel ? 'PARCEL • PACK TO GO' : `TABLE #${ord.table_number}`}
                       </span>
                       <p className="font-bold text-sm text-slate-900 mt-1.5">
                         {ord.customer_name}
@@ -1913,13 +2222,29 @@ function KitchenDisplayView({
                     ))}
                   </div>
 
-                  <button
-                    onClick={() => onMarkReady(ord)}
-                    className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2.5 rounded-xl text-xs flex items-center justify-center gap-1.5 shadow-sm"
-                  >
-                    <CheckCircle2 className="w-4 h-4" />
-                    Mark Ready for Pickup
-                  </button>
+                  <div className="space-y-2">
+                    <button
+                      onClick={() => onMarkReady(ord)}
+                      className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2.5 rounded-xl text-xs flex items-center justify-center gap-1.5 shadow-sm"
+                    >
+                      <CheckCircle2 className="w-4 h-4" />
+                      {isParcel ? 'Mark Parcel Packed & Ready' : 'Mark Ready for Pickup'}
+                    </button>
+                    <button
+                      onClick={async () => {
+                        const reason = window.prompt(
+                          `Void cooking order ${ord.id}? Enter reason:`,
+                          'Cancelled mid-prep'
+                        );
+                        if (reason !== null) {
+                          await onVoidOrder(ord, reason, 'Kitchen');
+                        }
+                      }}
+                      className="w-full bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold py-1.5 rounded-xl text-[11px]"
+                    >
+                      Void / Cancel Order
+                    </button>
+                  </div>
                 </div>
               );
             })
@@ -1930,7 +2255,7 @@ function KitchenDisplayView({
           <div className="flex items-center justify-between">
             <h3 className="font-extrabold text-sm text-slate-800 flex items-center gap-2">
               <span className="w-2.5 h-2.5 rounded-full bg-emerald-600"></span>
-              READY FOR WAITER PICKUP
+              READY FOR PICKUP
             </h3>
             <span className="bg-emerald-600 text-white text-xs font-extrabold px-2.5 py-0.5 rounded-full">
               {readyOrders.length}
@@ -1945,6 +2270,7 @@ function KitchenDisplayView({
                 ord.completed_at && ord.accepted_at
                   ? Number(ord.completed_at) - Number(ord.accepted_at)
                   : 0;
+              const isParcel = ord.order_type === 'Parcel' || Number(ord.table_number) === 0;
 
               return (
                 <div
@@ -1953,8 +2279,13 @@ function KitchenDisplayView({
                 >
                   <div className="flex items-start justify-between">
                     <div>
-                      <span className="bg-emerald-600 text-white text-xs font-extrabold px-2.5 py-1 rounded-lg">
-                        DELIVER TO TABLE #{ord.table_number}
+                      <span
+                        className={`text-white text-xs font-extrabold px-2.5 py-1 rounded-lg ${isParcel ? 'bg-purple-600' : 'bg-emerald-600'
+                          }`}
+                      >
+                        {isParcel
+                          ? 'PARCEL READY AT COUNTER'
+                          : `DELIVER TO TABLE #${ord.table_number}`}
                       </span>
                       <p className="font-bold text-sm text-slate-900 mt-1.5">
                         Guest: {ord.customer_name}
@@ -1986,7 +2317,7 @@ function KitchenDisplayView({
                     className="w-full bg-slate-900 hover:bg-slate-800 text-white font-bold py-2.5 rounded-xl text-xs flex items-center justify-center gap-1.5"
                   >
                     <Check className="w-4 h-4" />
-                    Confirm Served to Table
+                    {isParcel ? 'Confirm Handed to Customer' : 'Confirm Served to Table'}
                   </button>
                 </div>
               );
@@ -1999,641 +2330,26 @@ function KitchenDisplayView({
 }
 
 /* ============================================================================
-   CUSTOMER QR VIEW — MODIFIERS, TABLE ALERTS, TIC-TAC-TOE & 60s COUNTDOWN
-============================================================================ */
-function CustomerQrView({
-  menu,
-  tables,
-  orders,
-  now,
-  lockedTableNumber,
-  lockedQrToken,
-  onSendAlert,
-  onPlaceGraceOrder,
-  onUpdateGraceItems,
-  onCancelGraceOrder,
-  onLockOrderNow
-}) {
-  const [selectedTable, setSelectedTable] = useState(lockedTableNumber || 1);
-  const [category, setCategory] = useState('All');
-  const [cart, setCart] = useState([]);
-  const [customizingDish, setCustomizingDish] = useState(null);
-  const [showCheckoutModal, setShowCheckoutModal] = useState(false);
-
-  const [guestName, setGuestName] = useState('');
-  const [guestPhone, setGuestPhone] = useState('');
-  const [enteredPin, setEnteredPin] = useState('');
-  const [checkoutError, setCheckoutError] = useState('');
-  const [submitting, setSubmitting] = useState(false);
-  const [toast, setToast] = useState('');
-
-  useEffect(() => {
-    if (lockedTableNumber) setSelectedTable(lockedTableNumber);
-  }, [lockedTableNumber]);
-
-  const currentTableInfo = useMemo(
-    () => tables.find((t) => Number(t.table_number) === Number(selectedTable)),
-    [tables, selectedTable]
-  );
-
-  const activeGraceOrder = useMemo(
-    () =>
-      orders.find(
-        (o) => Number(o.table_number) === Number(selectedTable) && o.status === 'Grace_Period'
-      ),
-    [orders, selectedTable]
-  );
-
-  const tableRunningOrders = useMemo(
-    () =>
-      orders.filter(
-        (o) =>
-          Number(o.table_number) === Number(selectedTable) &&
-          !o.paid &&
-          o.status !== 'Cancelled'
-      ),
-    [orders, selectedTable]
-  );
-
-  const runningBillTotal = useMemo(() => {
-    const subtotal = tableRunningOrders.reduce(
-      (sum, ord) =>
-        sum + (ord.items || []).reduce((s, item) => s + Number(item.price) * item.qty, 0),
-      0
-    );
-    const gst = Math.round(subtotal * 0.05);
-    return { subtotal, gst, grandTotal: subtotal + gst };
-  }, [tableRunningOrders]);
-
-  const showToast = (msg) => {
-    setToast(msg);
-    setTimeout(() => setToast(''), 3500);
-  };
-
-  const graceRemainingMs = activeGraceOrder ? Number(activeGraceOrder.grace_ends_at) - now : 0;
-  const isFinalizingBuffer = activeGraceOrder && graceRemainingMs <= 2000;
-
-  const commitAddItem = async (itemObj) => {
-    const key = itemObj.line_key || String(itemObj.id);
-
-    if (activeGraceOrder) {
-      if (isFinalizingBuffer) {
-        showToast('Order is locking to kitchen now. You can place a new add-on in 2 seconds.');
-        return;
-      }
-      const existing = activeGraceOrder.items.find(
-        (i) => (i.line_key || String(i.id)) === key
-      );
-      const updatedItems = existing
-        ? activeGraceOrder.items.map((i) =>
-            (i.line_key || String(i.id)) === key ? { ...i, qty: i.qty + 1 } : i
-          )
-        : [...activeGraceOrder.items, itemObj];
-
-      const ok = await onUpdateGraceItems(activeGraceOrder.id, updatedItems);
-      if (!ok) showToast('1-min edit window just closed! Your order is now with the Chef.');
-      return;
-    }
-
-    setCart((prev) => {
-      const existing = prev.find((i) => (i.line_key || String(i.id)) === key);
-      if (existing) {
-        return prev.map((i) =>
-          (i.line_key || String(i.id)) === key ? { ...i, qty: i.qty + 1 } : i
-        );
-      }
-      return [...prev, itemObj];
-    });
-  };
-
-  const handleDishClick = (dish) => {
-    if (!dish.in_stock) return;
-    if (Array.isArray(dish.modifiers) && dish.modifiers.length > 0) {
-      setCustomizingDish(dish);
-      return;
-    }
-    commitAddItem({
-      id: dish.id,
-      line_key: String(dish.id),
-      name: dish.name,
-      price: Number(dish.price),
-      recipe_cost: Number(dish.recipe_cost),
-      station: dish.station,
-      qty: 1,
-      selected_modifiers: [],
-      note: ''
-    });
-  };
-
-  const handleUpdateCartQty = (lineKey, delta) => {
-    setCart((prev) =>
-      prev
-        .map((i) =>
-          (i.line_key || String(i.id)) === lineKey ? { ...i, qty: i.qty + delta } : i
-        )
-        .filter((i) => i.qty > 0)
-    );
-  };
-
-  const handleUpdateGraceQty = async (lineKey, delta) => {
-    if (!activeGraceOrder || isFinalizingBuffer) return;
-
-    const updatedItems = activeGraceOrder.items
-      .map((i) =>
-        (i.line_key || String(i.id)) === lineKey ? { ...i, qty: i.qty + delta } : i
-      )
-      .filter((i) => i.qty > 0);
-
-    if (updatedItems.length === 0) {
-      const cancelled = await onCancelGraceOrder(activeGraceOrder.id);
-      showToast(
-        cancelled
-          ? 'Order cancelled before reaching the kitchen.'
-          : 'Too late to cancel — order already locked to Kitchen.'
-      );
-      return;
-    }
-
-    const ok = await onUpdateGraceItems(activeGraceOrder.id, updatedItems);
-    if (!ok) showToast('1-min edit window just closed! Order is locked to Kitchen.');
-  };
-
-  const handleConfirmPlaceOrder = async (e) => {
-    e.preventDefault();
-    setCheckoutError('');
-
-    if (!guestName.trim()) {
-      setCheckoutError('Please enter your name so the waiter knows who to serve.');
-      return;
-    }
-
-    setSubmitting(true);
-    try {
-      await onPlaceGraceOrder({
-        tableNumber: selectedTable,
-        qrToken: lockedQrToken || currentTableInfo?.qr_token || '',
-        standeePin: enteredPin.trim(),
-        customerName: guestName,
-        customerPhone: guestPhone,
-        items: cart
-      });
-      setCart([]);
-      setShowCheckoutModal(false);
-      setEnteredPin('');
-      showToast('Order placed! You have 60 seconds to edit or cancel.');
-    } catch (err) {
-      setCheckoutError(err.message || 'Failed to place order.');
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  return (
-    <div className="max-w-md mx-auto bg-white min-h-[85vh] rounded-3xl shadow-lg border border-slate-200 overflow-hidden pb-28 relative">
-      <div className="bg-slate-900 text-white p-4 flex items-center justify-between">
-        <div>
-          <div className="flex items-center gap-2">
-            <span className="bg-indigo-600 text-white text-xs font-extrabold px-2.5 py-0.5 rounded-full">
-              TABLE #{selectedTable}
-            </span>
-            {lockedTableNumber && (
-              <span className="inline-flex items-center gap-1 text-[11px] text-emerald-400 font-semibold">
-                <Lock className="w-3 h-3" /> QR Locked
-              </span>
-            )}
-          </div>
-          <h2 className="font-bold text-sm mt-1">Browse Menu & Order</h2>
-        </div>
-
-        {!lockedTableNumber && (
-          <select
-            value={selectedTable}
-            onChange={(e) => setSelectedTable(Number(e.target.value))}
-            className="bg-slate-800 text-white text-xs font-bold px-2.5 py-1.5 rounded-lg border border-slate-700"
-          >
-            {tables.map((t) => (
-              <option key={t.table_number} value={t.table_number}>
-                Table #{t.table_number}
-              </option>
-            ))}
-          </select>
-        )}
-      </div>
-
-      {/* 1-TAP REAL-TIME TABLE SERVICE ALERTS */}
-      <div className="grid grid-cols-3 gap-2 px-3 pt-3">
-        {['Call Waiter', 'Need Water', 'Request Bill'].map((type) => (
-          <button
-            key={type}
-            onClick={async () => {
-              try {
-                await onSendAlert(selectedTable, type);
-                showToast(`Sent "${type}" alert to staff!`);
-              } catch (err) {
-                showToast('Could not send alert: ' + err.message);
-              }
-            }}
-            className="bg-slate-100 hover:bg-indigo-50 hover:text-indigo-700 border border-slate-200 rounded-xl py-2 text-[11px] font-bold text-slate-700 transition"
-          >
-            {type}
-          </button>
-        ))}
-      </div>
-
-      {toast && (
-        <div className="m-3 p-3 rounded-xl bg-slate-900 text-white text-xs font-semibold text-center shadow">
-          {toast}
-        </div>
-      )}
-
-      {activeGraceOrder && (
-        <div className="m-3 p-4 rounded-2xl bg-amber-50 border-2 border-amber-400 shadow-sm">
-          <div className="flex items-center justify-between gap-2 mb-2">
-            <div className="flex items-center gap-2">
-              <Clock className="w-5 h-5 text-amber-600 shrink-0" />
-              <div>
-                <h3 className="font-extrabold text-xs uppercase text-amber-900">
-                  {isFinalizingBuffer
-                    ? 'Finalizing & Sending to Kitchen...'
-                    : '1-Min Edit Window Active'}
-                </h3>
-                <p className="text-[11px] text-amber-800">
-                  {isFinalizingBuffer
-                    ? 'Edits paused to prevent kitchen race conditions.'
-                    : 'Add items from menu below, adjust qty, or cancel.'}
-                </p>
-              </div>
-            </div>
-            <div className="bg-amber-600 text-white font-mono font-extrabold text-base px-3 py-1 rounded-xl shrink-0">
-              {formatCountdown(graceRemainingMs)}
-            </div>
-          </div>
-
-          <div className="bg-white rounded-xl border border-amber-200 p-2.5 space-y-2 my-3">
-            {activeGraceOrder.items.map((item) => {
-              const key = item.line_key || String(item.id);
-              return (
-                <div key={key} className="flex items-center justify-between text-xs gap-2">
-                  <div>
-                    <span className="font-bold text-slate-900">{item.name}</span>
-                    <span className="text-slate-500 ml-1.5">₹{item.price * item.qty}</span>
-                    {item.selected_modifiers?.length > 0 && (
-                      <p className="text-[10px] text-indigo-600">
-                        + {item.selected_modifiers.join(', ')}
-                      </p>
-                    )}
-                    {item.note && (
-                      <p className="text-[10px] italic text-rose-600">Note: {item.note}</p>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-1.5 shrink-0">
-                    <button
-                      disabled={isFinalizingBuffer}
-                      onClick={() => handleUpdateGraceQty(key, -1)}
-                      className="p-1 bg-slate-100 hover:bg-rose-100 rounded disabled:opacity-40"
-                    >
-                      <Minus className="w-3.5 h-3.5" />
-                    </button>
-                    <span className="font-bold w-5 text-center">{item.qty}</span>
-                    <button
-                      disabled={isFinalizingBuffer}
-                      onClick={() => handleUpdateGraceQty(key, 1)}
-                      className="p-1 bg-slate-100 hover:bg-emerald-100 rounded disabled:opacity-40"
-                    >
-                      <Plus className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-
-          <div className="flex gap-2">
-            <button
-              disabled={isFinalizingBuffer}
-              onClick={() => onLockOrderNow(activeGraceOrder.id)}
-              className="flex-1 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-bold py-2 rounded-xl text-xs flex items-center justify-center gap-1.5"
-            >
-              <Send className="w-3.5 h-3.5" />
-              Send to Kitchen Now
-            </button>
-            <button
-              disabled={isFinalizingBuffer}
-              onClick={async () => {
-                const ok = await onCancelGraceOrder(activeGraceOrder.id);
-                showToast(ok ? 'Order cancelled.' : 'Order already locked to Kitchen.');
-              }}
-              className="bg-rose-100 hover:bg-rose-200 disabled:opacity-50 text-rose-700 font-bold px-3 py-2 rounded-xl text-xs"
-            >
-              Cancel
-            </button>
-          </div>
-        </div>
-      )}
-
-      {tableRunningOrders.length > 0 && (
-        <div className="m-3 p-3.5 rounded-2xl bg-indigo-50 border border-indigo-200">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-extrabold uppercase text-indigo-950">
-              Table #{selectedTable} Live Status & Running Bill
-            </span>
-            <span className="text-sm font-extrabold text-indigo-700">
-              ₹{runningBillTotal.grandTotal}{' '}
-              <span className="text-[10px] font-normal text-slate-500">(incl. 5% GST)</span>
-            </span>
-          </div>
-          <div className="space-y-1.5">
-            {tableRunningOrders.map((ord) => (
-              <div
-                key={ord.id}
-                className="bg-white p-2.5 rounded-xl border border-indigo-100 flex items-center justify-between gap-2 text-xs"
-              >
-                <div>
-                  <p className="font-bold text-slate-900">
-                    {ord.id} • {ord.customer_name}
-                  </p>
-                  <p className="text-[11px] text-slate-500">
-                    {(ord.items || []).map((i) => `${i.qty}x ${i.name}`).join(', ')}
-                  </p>
-                </div>
-                <span
-                  className={`px-2 py-0.5 rounded-full text-[11px] font-bold shrink-0 ${
-                    ord.status === 'Grace_Period'
-                      ? 'bg-amber-100 text-amber-800'
-                      : ord.status === 'New'
-                      ? 'bg-blue-100 text-blue-800'
-                      : ord.status === 'Preparing'
-                      ? 'bg-indigo-600 text-white'
-                      : ord.status === 'Ready'
-                      ? 'bg-emerald-600 text-white'
-                      : 'bg-slate-200 text-slate-700'
-                  }`}
-                >
-                  {ord.status === 'Grace_Period'
-                    ? `Editable (${formatCountdown(Number(ord.grace_ends_at) - now)})`
-                    : ord.status === 'New'
-                    ? 'Queued in Kitchen'
-                    : ord.status === 'Preparing'
-                    ? `Cooking (${formatTimer(now - Number(ord.accepted_at || now))})`
-                    : ord.status === 'Ready'
-                    ? 'Ready! On the way'
-                    : 'Served'}
-                </span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* WAITING ROOM TIC-TAC-TOE GAME (SHOWN WHILE ORDER IS QUEUED OR COOKING) */}
-      {tableRunningOrders.some((o) => o.status === 'New' || o.status === 'Preparing') && (
-        <TicTacToeGame />
-      )}
-
-      <div className="flex gap-2 overflow-x-auto px-3 py-2.5 border-b border-slate-100">
-        {['All', 'Coffee', 'Food', 'Beverages', 'Desserts'].map((cat) => (
-          <button
-            key={cat}
-            onClick={() => setCategory(cat)}
-            className={`px-3 py-1.5 rounded-full text-xs font-bold whitespace-nowrap ${
-              category === cat ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-600'
-            }`}
-          >
-            {cat}
-          </button>
-        ))}
-      </div>
-
-      <div className="p-3 space-y-3">
-        {menu
-          .filter((m) => category === 'All' || m.category === category)
-          .map((dish) => {
-            const hasModifiers = Array.isArray(dish.modifiers) && dish.modifiers.length > 0;
-            const inCartPlain = !hasModifiers ? cart.find((c) => c.id === dish.id) : null;
-            return (
-              <div
-                key={dish.id}
-                className={`p-3.5 rounded-2xl border flex items-center justify-between gap-3 ${
-                  dish.in_stock
-                    ? 'bg-white border-slate-200'
-                    : 'bg-slate-50 border-slate-200 opacity-60'
-                }`}
-              >
-                <div className="flex-1">
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-[10px] font-bold uppercase px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200">
-                      {dish.dietary}
-                    </span>
-                    <span className="text-[10px] text-slate-400">~{dish.prep_time} mins</span>
-                    {hasModifiers && (
-                      <span className="text-[10px] font-semibold text-indigo-600">
-                        • Customizable
-                      </span>
-                    )}
-                  </div>
-                  <h4 className="font-bold text-sm text-slate-900 mt-1">{dish.name}</h4>
-                  <p className="text-xs text-slate-500">{dish.description}</p>
-                  <p className="text-sm font-extrabold text-indigo-600 mt-1">₹{dish.price}</p>
-                </div>
-
-                {!dish.in_stock ? (
-                  <span className="px-3 py-1.5 rounded-xl text-xs font-bold bg-slate-200 text-slate-500">
-                    Sold Out
-                  </span>
-                ) : !activeGraceOrder && inCartPlain ? (
-                  <div className="flex items-center gap-1.5 bg-indigo-50 border border-indigo-200 rounded-xl p-1">
-                    <button
-                      onClick={() => handleUpdateCartQty(inCartPlain.line_key || String(dish.id), -1)}
-                      className="p-1 text-indigo-700 hover:bg-indigo-100 rounded-lg"
-                    >
-                      <Minus className="w-3.5 h-3.5" />
-                    </button>
-                    <span className="text-xs font-extrabold w-5 text-center text-indigo-900">
-                      {inCartPlain.qty}
-                    </span>
-                    <button
-                      onClick={() => handleUpdateCartQty(inCartPlain.line_key || String(dish.id), 1)}
-                      className="p-1 text-indigo-700 hover:bg-indigo-100 rounded-lg"
-                    >
-                      <Plus className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                ) : (
-                  <button
-                    onClick={() => handleDishClick(dish)}
-                    className={`px-3.5 py-2 rounded-xl text-xs font-bold shadow-sm transition ${
-                      activeGraceOrder
-                        ? 'bg-amber-500 hover:bg-amber-600 text-white'
-                        : 'bg-indigo-600 hover:bg-indigo-700 text-white'
-                    }`}
-                  >
-                    {activeGraceOrder
-                      ? '+ Add to Order'
-                      : hasModifiers
-                      ? '+ Customize'
-                      : '+ Add'}
-                  </button>
-                )}
-              </div>
-            );
-          })}
-      </div>
-
-      {customizingDish && (
-        <ModifierModal
-          dish={customizingDish}
-          onClose={() => setCustomizingDish(null)}
-          onConfirm={(customizedItem) => {
-            commitAddItem(customizedItem);
-            setCustomizingDish(null);
-          }}
-        />
-      )}
-
-      {cart.length > 0 && !activeGraceOrder && (
-        <div className="fixed bottom-4 left-4 right-4 max-w-md mx-auto bg-slate-900 text-white p-4 rounded-2xl shadow-2xl z-30 flex items-center justify-between">
-          <div>
-            <p className="text-xs text-slate-300">
-              {cart.reduce((s, i) => s + i.qty, 0)} Items in Cart
-            </p>
-            <p className="font-extrabold text-base">
-              ₹{cart.reduce((s, i) => s + i.price * i.qty, 0)}{' '}
-              <span className="text-[11px] font-normal text-slate-400">+ 5% GST</span>
-            </p>
-          </div>
-          <button
-            onClick={() => {
-              setCheckoutError('');
-              setShowCheckoutModal(true);
-            }}
-            className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold px-4 py-2.5 rounded-xl text-xs flex items-center gap-1.5"
-          >
-            <ShoppingBag className="w-4 h-4" />
-            Proceed to Order →
-          </button>
-        </div>
-      )}
-
-      {showCheckoutModal && (
-        <div className="fixed inset-0 bg-slate-900/70 flex items-center justify-center p-4 z-50">
-          <form
-            onSubmit={handleConfirmPlaceOrder}
-            className="bg-white rounded-2xl max-w-sm w-full p-5 shadow-2xl space-y-4"
-          >
-            <div className="flex items-center justify-between">
-              <h3 className="font-extrabold text-base text-slate-900">
-                Confirm Table #{selectedTable} Order
-              </h3>
-              <button
-                type="button"
-                onClick={() => setShowCheckoutModal(false)}
-                className="text-slate-400 hover:text-slate-700 text-sm font-bold"
-              >
-                ✕
-              </button>
-            </div>
-
-            {checkoutError && (
-              <div className="p-2.5 rounded-xl bg-rose-50 border border-rose-200 text-xs font-semibold text-rose-700">
-                {checkoutError}
-              </div>
-            )}
-
-            <div className="bg-slate-50 rounded-xl p-2.5 max-h-32 overflow-y-auto space-y-1.5 border border-slate-200">
-              {cart.map((item) => {
-                const key = item.line_key || String(item.id);
-                return (
-                  <div key={key} className="flex items-center justify-between text-xs gap-2">
-                    <div>
-                      <span className="font-bold text-slate-800">
-                        {item.qty}× {item.name}
-                      </span>
-                      {item.selected_modifiers?.length > 0 && (
-                        <p className="text-[10px] text-indigo-600">
-                          + {item.selected_modifiers.join(', ')}
-                        </p>
-                      )}
-                    </div>
-                    <span className="font-bold text-slate-900">₹{item.price * item.qty}</span>
-                  </div>
-                );
-              })}
-            </div>
-
-            <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">
-                Your Name <span className="text-rose-500">*</span>
-              </label>
-              <div className="relative">
-                <User className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
-                <input
-                  required
-                  placeholder="e.g., Sharad"
-                  value={guestName}
-                  onChange={(e) => setGuestName(e.target.value)}
-                  className="w-full pl-9 pr-3 py-2 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-indigo-600 outline-none"
-                />
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">
-                2-Digit Table Standee PIN <span className="text-rose-500">*</span>
-              </label>
-              <input
-                required
-                maxLength={2}
-                placeholder="Printed on your table QR card"
-                value={enteredPin}
-                onChange={(e) => setEnteredPin(e.target.value)}
-                className="w-full px-3 py-2 border border-slate-300 rounded-xl text-sm font-mono font-bold tracking-widest focus:ring-2 focus:ring-indigo-600 outline-none"
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">
-                Phone Number <span className="text-slate-400 font-normal">(Optional)</span>
-              </label>
-              <div className="relative">
-                <Phone className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
-                <input
-                  type="tel"
-                  placeholder="For WhatsApp digital bill"
-                  value={guestPhone}
-                  onChange={(e) => setGuestPhone(e.target.value)}
-                  className="w-full pl-9 pr-3 py-2 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-indigo-600 outline-none"
-                />
-              </div>
-            </div>
-
-            <button
-              disabled={submitting}
-              type="submit"
-              className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 rounded-xl text-sm flex items-center justify-center gap-2 shadow"
-            >
-              <Clock className="w-4 h-4" />
-              {submitting ? 'Placing Order...' : 'Place Order (Starts 60s Edit Timer)'}
-            </button>
-          </form>
-        </div>
-      )}
-    </div>
-  );
-}
-
-/* ============================================================================
    MAIN APP SHELL WITH PER-TAB ROLE-BASED ROUTING
 ============================================================================ */
 export default function App() {
   const [tables, setTables] = useState([]);
-  const [lockedTableNumber, setLockedTableNumber] = useState(null);
-  const [lockedQrToken, setLockedQrToken] = useState(null);
+  const [lockedTableNumber, setLockedTableNumber] = useState(() => {
+    const param = new URLSearchParams(window.location.search).get('table');
+    return param !== null ? Number(param) : null;
+  });
+  const [lockedQrToken, setLockedQrToken] = useState(() => {
+    return new URLSearchParams(window.location.search).get('token') || null;
+  });
   const [staffSession, setStaffSession] = useState(() => {
     const saved = sessionStorage.getItem('cafe_staff_session');
     return saved ? JSON.parse(saved) : null;
   });
 
   const [tab, setTab] = useState(() => {
+    if (new URLSearchParams(window.location.search).get('table') !== null) {
+      return 'customer';
+    }
     const saved = sessionStorage.getItem('cafe_staff_session');
     if (saved) {
       const role = JSON.parse(saved).role;
@@ -2651,10 +2367,13 @@ export default function App() {
     updateGraceOrderItems,
     cancelGraceOrder,
     lockOrderNow,
+    staffCancelOrder,
+    toggleHoldOrder,
     startPreparing,
     markOrderReady,
     markOrderServed,
     settleTableBill,
+    settleParcelOrder,
     moveOrMergeTable
   } = useOrders();
   const {
@@ -2682,7 +2401,7 @@ export default function App() {
     const params = new URLSearchParams(window.location.search);
     const tableParam = params.get('table');
     const tokenParam = params.get('token');
-    if (tableParam) {
+    if (tableParam !== null) {
       setLockedTableNumber(Number(tableParam));
       setLockedQrToken(tokenParam || '');
       setTab('customer');
@@ -2722,18 +2441,26 @@ export default function App() {
     return false;
   };
 
-  if (!lockedTableNumber && !staffSession) {
+  if (lockedTableNumber === null && !staffSession) {
     return <StaffLoginScreen onLogin={handleStaffLogin} />;
   }
 
   const kdsNewCount = orders.filter((o) => o.status === 'New').length;
   const occupiedCount = new Set(
-    orders.filter((o) => !o.paid && o.status !== 'Cancelled').map((o) => Number(o.table_number))
+    orders
+      .filter(
+        (o) =>
+          !o.paid &&
+          o.status !== 'Cancelled' &&
+          o.order_type !== 'Parcel' &&
+          Number(o.table_number) > 0
+      )
+      .map((o) => Number(o.table_number))
   ).size;
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900">
-      {!lockedTableNumber && staffSession && (
+      {lockedTableNumber === null && staffSession && (
         <header className="bg-slate-900 text-white sticky top-0 z-30 shadow print:hidden">
           <div className="max-w-7xl mx-auto px-4 py-3 flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-2.5">
@@ -2830,7 +2557,7 @@ export default function App() {
                   }`}
                 >
                   <QrCode className="w-4 h-4" />
-                  Table QRs
+                  Table & Parcel QRs
                 </button>
               )}
 
@@ -2862,9 +2589,7 @@ export default function App() {
       )}
 
       <main className="max-w-7xl mx-auto p-4 sm:p-6">
-        {loading ? (
-          <p className="text-sm text-slate-500 text-center py-12">Connecting to Supabase...</p>
-        ) : lockedTableNumber ? (
+        {lockedTableNumber !== null ? (
           <CustomerQrView
             menu={menu}
             tables={tables}
@@ -2872,12 +2597,15 @@ export default function App() {
             now={now}
             lockedTableNumber={lockedTableNumber}
             lockedQrToken={lockedQrToken}
+            alerts={alerts}
             onSendAlert={sendTableAlert}
             onPlaceGraceOrder={placeGraceOrder}
             onUpdateGraceItems={updateGraceOrderItems}
             onCancelGraceOrder={cancelGraceOrder}
             onLockOrderNow={lockOrderNow}
           />
+        ) : loading ? (
+          <p className="text-sm text-slate-500 text-center py-12">Connecting to Supabase...</p>
         ) : tab === 'erp' && canSee('erp') ? (
           <AdminErpView
             orders={orders}
@@ -2893,10 +2621,14 @@ export default function App() {
         ) : tab === 'pos' && canSee('pos') ? (
           <CashierPosView
             tables={tables}
+                  menu={menu}
             orders={orders}
             alerts={alerts}
             onResolveAlert={resolveTableAlert}
             onSettleTable={settleTableBill}
+                  onSettleParcel={settleParcelOrder}
+                  onCreateParcel={placeGraceOrder}
+                  onVoidOrder={staffCancelOrder}
             onMoveMergeTable={moveOrMergeTable}
           />
         ) : tab === 'kds' && canSee('kds') ? (
@@ -2907,6 +2639,8 @@ export default function App() {
             onStartPreparing={startPreparing}
             onMarkReady={markOrderReady}
             onMarkServed={markOrderServed}
+                    onToggleHold={toggleHoldOrder}
+                    onVoidOrder={staffCancelOrder}
             onToggleStock={toggleStock}
           />
         ) : tab === 'menu' && canSee('menu') ? (
@@ -2926,6 +2660,7 @@ export default function App() {
             now={now}
             lockedTableNumber={lockedTableNumber}
             lockedQrToken={lockedQrToken}
+                          alerts={alerts}
             onSendAlert={sendTableAlert}
             onPlaceGraceOrder={placeGraceOrder}
             onUpdateGraceItems={updateGraceOrderItems}
